@@ -35,6 +35,13 @@ Then open **http://localhost:8000**. To test alone, open the page in two tabs.
 
 Others open `http://<your-IP>:8000` (find it with `ipconfig`). Allow the Windows firewall prompt.
 
+### Over the internet (Pinggy tunnel)
+
+Start the server (`start.bat`), then double-click **`tunnel.bat`** and send the `https://…pinggy…` link
+to your friends. Free tunnels last 60 minutes; `tunnel.bat` then opens a new one automatically
+(with a **new** link). Visitors see a Pinggy warning page once – click **Enter site**.
+`tunnel.bat` uses Git's `ssh`, because the SSH built into Windows often fails with Pinggy.
+
 ## How it works
 
 1. Press **Play**, then log in or register (with a captcha).
