@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# IDEs
+.idea/
+
+# Node (nicht mehr benoetigt)
+node_modules/
+
+# Datenbank (Benutzerkonten)
+data/
+
+# Local tool settings
+.claude/

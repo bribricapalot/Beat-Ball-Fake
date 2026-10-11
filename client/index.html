@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <title>Big Leagues</title>
+</head>
+<body>
+
+<!-- Football field behind all menus (blurred everywhere except the start screen) -->
+<div id="field-bg" class="field-bg"></div>
+
+<!-- Connection status -->
+<div id="connection-banner" class="banner hidden">
+  <span id="connection-text">Connecting to the server…</span>
+  <button id="reconnect-button" class="hidden">Reconnect</button>
+</div>
+
+<!-- 1) Start screen -->
+<section id="screen-start" class="screen">
+  <div class="start-column">
+    <img src="assets/logo.webp" alt="Big Leagues" class="logo-img breathing">
+    <button id="play-button" class="menu-button green">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>
+      <span>Play</span>
+    </button>
+    <button id="leaderboard-button" class="menu-button blue">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6a1 1 0 0 1 1 1v17H8V4a1 1 0 0 1 1-1zM2 10h4a1 1 0 0 1 1 1v10H1V11a1 1 0 0 1 1-1zm16 4h4a1 1 0 0 1 1 1v6h-6v-6a1 1 0 0 1 1-1z"/></svg>
+      <span>Leaderboard</span>
+    </button>
+  </div>
+  <p class="school-note">School project – for educational purposes only, non-commercial.
+    Ability and PlayStyle names/icons belong to Blade Ball (Roblox) and EA SPORTS FC; no affiliation.</p>
+</section>
+
+<!-- 2) Login / register -->
+<section id="screen-auth" class="screen hidden">
+  <div class="card narrow">
+    <img src="assets/logo.webp" alt="Big Leagues" class="logo-img card-logo">
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="login" role="tab">Login</button>
+      <button class="tab" data-tab="register" role="tab">Register</button>
+    </div>
+
+    <form id="login-form" class="auth-form">
+      <label for="login-name">Name</label>
+      <input id="login-name" autocomplete="username" maxlength="16" required>
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required>
+      <p class="form-error" aria-live="polite"></p>
+      <button type="submit" class="primary">Log in</button>
+    </form>
+
+    <form id="register-form" class="auth-form hidden">
+      <label for="register-name">Name <span class="muted">(3–16 characters, shown in game)</span></label>
+      <input id="register-name" autocomplete="username" maxlength="16" pattern="[A-Za-z0-9_]{3,16}" required>
+      <label for="register-password">Password <span class="muted">(min. 8 characters)</span></label>
+      <input id="register-password" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="register-password2">Repeat password</label>
+      <input id="register-password2" type="password" autocomplete="new-password" minlength="8" required>
+
+      <label for="captcha-input">Security code</label>
+      <div class="captcha-row">
+        <img id="captcha-image" alt="Captcha – type the characters" width="220" height="80">
+        <button type="button" id="captcha-refresh" class="icon-button" title="New code" aria-label="New code">↻</button>
+      </div>
+      <input id="captcha-input" autocomplete="off" maxlength="5" placeholder="Characters from the image" required>
+
+      <p class="form-error" aria-live="polite"></p>
+      <button type="submit" class="primary">Create account</button>
+    </form>
+
+    <button class="link back-to-start">← Back</button>
+  </div>
+</section>
+
+<!-- 3) Room list -->
+<section id="screen-browser" class="screen hidden">
+  <div class="roomlist">
+    <header class="rl-header">
+      <h1>Room list</h1>
+      <span id="online-count"></span>
+    </header>
+    <p class="tip">Tip: Join rooms with a low distance to reduce lag.</p>
+
+    <div class="rl-body">
+      <div class="rl-table-wrap">
+        <table class="room-table">
+          <thead>
+            <tr><th>Name</th><th>Players</th><th>Pass</th><th>Distance</th></tr>
+          </thead>
+          <tbody id="lobby-rows"></tbody>
+        </table>
+        <p id="lobby-empty" class="muted empty-hint"></p>
+      </div>
+
+      <aside class="rl-side">
+        <div class="side-group">
+          <button id="refresh-button" class="side-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            <span>Refresh</span>
+          </button>
+          <button id="join-button" class="side-btn" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5v3H2v4h8v3zm9-14h-8v2h8v14h-8v2h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/></svg>
+            <span>Join Room</span>
+          </button>
+          <button id="open-create" class="side-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span>Create Room</span>
+          </button>
+        </div>
+
+        <div class="side-group">
+          <button id="account-button" class="me-box" title="Change name or password">
+            <div id="my-skin" class="skin-dot"></div>
+            <div>
+              <strong id="whoami-name"></strong>
+              <span class="muted">Ping <span id="my-ping">–</span></span>
+            </div>
+            <svg class="edit-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          </button>
+          <button id="rl-leaderboard" class="side-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6a1 1 0 0 1 1 1v17H8V4a1 1 0 0 1 1-1zM2 10h4a1 1 0 0 1 1 1v10H1V11a1 1 0 0 1 1-1zm16 4h4a1 1 0 0 1 1 1v6h-6v-6a1 1 0 0 1 1-1z"/></svg>
+            <span>Leaderboard</span>
+          </button>
+          <button id="loadout-button" class="side-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+            <span>Abilities</span>
+          </button>
+          <button id="skin-button" class="side-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3l2.2 1.6-.8 2.6h-2.8l-.8-2.6L12 5zM6.3 8.2l1.6 2.1-1 2.8-2.4.5a8 8 0 0 1 1.8-5.4zm11.4 0a8 8 0 0 1 1.8 5.4l-2.4-.5-1-2.8 1.6-2.1zM10 13h4l1 3-3 2-3-2 1-3z"/></svg>
+            <span>Change Skin</span>
+          </button>
+          <button id="rl-settings" class="side-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.1 7.1 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54a7 7 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.1 7.1 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.61.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.8c.24 0 .44-.18.49-.42l.36-2.54a7 7 0 0 0 1.63-.94l2.39.96c.22.08.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+            <span>Settings</span>
+          </button>
+          <button id="logout-button" class="side-btn danger">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 17v-3H9v-4h7V7l5 5-5 5zM14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9z"/></svg>
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="rl-footer">
+      <button class="filter-btn" data-filter="locked" aria-pressed="true">Show locked</button>
+      <button class="filter-btn" data-filter="full" aria-pressed="true">Show full</button>
+      <button class="filter-btn" data-filter="empty" aria-pressed="true">Show empty</button>
+    </footer>
+  </div>
+</section>
+
+<!-- 4) Inside a room -->
+<section id="screen-room" class="screen hidden">
+  <div class="card wide">
+    <header class="card-header">
+      <div>
+        <h1 id="room-name"></h1>
+        <p class="muted"><span id="room-mode"></span> · Code <strong id="room-code"></strong> <span id="room-lock"></span></p>
+      </div>
+      <button id="leave-button" class="secondary">Leave</button>
+    </header>
+
+    <div class="teams">
+      <div class="team-col team-a">
+        <h2>Team Red</h2>
+        <ul id="team-a-list"></ul>
+        <button class="secondary join-team" data-team="A">Join Red</button>
+      </div>
+      <div class="team-col team-b">
+        <h2>Team Blue</h2>
+        <ul id="team-b-list"></ul>
+        <button class="secondary join-team" data-team="B">Join Blue</button>
+      </div>
+    </div>
+
+    <footer class="room-footer">
+      <p id="room-hint" class="muted"></p>
+      <button id="start-button" class="primary">Start match</button>
+    </footer>
+  </div>
+</section>
+
+<!-- 5) Leaderboard -->
+<section id="screen-leaderboard" class="screen hidden">
+  <div class="card narrow">
+    <img src="assets/logo.webp" alt="Big Leagues" class="logo-img card-logo">
+    <h2 class="center">Top scorers</h2>
+    <table class="leaderboard-table">
+      <thead><tr><th>#</th><th>Name</th><th>Goals</th></tr></thead>
+      <tbody id="leaderboard-rows"></tbody>
+    </table>
+    <p id="leaderboard-empty" class="muted empty-hint hidden"></p>
+    <button id="leaderboard-back" class="link">← Back</button>
+  </div>
+</section>
+
+<!-- 6) Match -->
+<section id="screen-game" class="screen hidden">
+  <div class="hud-container">
+    <div class="scoreboard">
+      <div class="sb-team sb-red" id="sb-red">RED</div>
+      <div class="sb-score">
+        <span id="score-a">0</span>
+        <span class="sb-sep">:</span>
+        <span id="score-b">0</span>
+      </div>
+      <div class="sb-team sb-blue" id="sb-blue">BLUE</div>
+    </div>
+    <div class="timer-box" id="timer">03:00</div>
+  </div>
+
+  <button id="settings-button" class="settings-button" title="Settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.1 7.1 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54a7 7 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.1 7.1 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.61.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.8c.24 0 .44-.18.49-.42l.36-2.54a7 7 0 0 0 1.63-.94l2.39.96c.22.08.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+  </button>
+
+  <div id="goal-banner" class="goal-banner" aria-live="polite">
+    <div class="goal-title">GOAL!</div>
+    <div class="goal-text" id="goal-text"></div>
+  </div>
+
+  <!-- Equipped ability + PlayStyles (bottom left) -->
+  <div class="ability-hud">
+    <div id="ability-slot" class="ability-slot">
+      <span id="ability-icon" class="ability-icon"></span>
+      <span id="ability-cooldown" class="ability-cooldown"></span>
+      <kbd id="ability-key" class="ability-key">R</kbd>
+      <span id="ability-charges" class="ability-charges"></span>
+    </div>
+    <div>
+      <strong id="ability-name"></strong>
+      <div id="hud-playstyles" class="hud-playstyles"></div>
+    </div>
+  </div>
+
+  <!-- Keybinds (bottom right) -->
+  <div id="controls-panel" class="controls-panel">
+    <button id="controls-toggle" class="controls-toggle" aria-expanded="true">Hide keybinds ▾</button>
+    <dl id="controls-list" class="controls-list"></dl>
+  </div>
+
+  <div id="game-container"></div>
+
+  <div id="game-over" class="overlay">
+    <div class="card narrow center">
+      <h1 id="game-over-title"></h1>
+      <p id="game-over-score" class="final-score"></p>
+      <p id="game-over-reason" class="muted"></p>
+      <button id="back-to-lobby" class="primary">Back to room</button>
+    </div>
+  </div>
+</section>
+
+<!-- Dialog: create room -->
+<div id="create-dialog" class="overlay">
+  <form id="create-form" class="card narrow">
+    <h2>Create Room</h2>
+    <label for="lobby-name">Name</label>
+    <input id="lobby-name" maxlength="24" autocomplete="off" placeholder="My room">
+    <span class="label">Mode</span>
+    <div class="mode-picker">
+      <label><input type="radio" name="teamSize" value="1" checked><span>1 vs 1</span></label>
+      <label><input type="radio" name="teamSize" value="2"><span>2 vs 2</span></label>
+      <label><input type="radio" name="teamSize" value="3"><span>3 vs 3</span></label>
+    </div>
+    <label for="lobby-password">Password <span class="muted">(optional)</span></label>
+    <input id="lobby-password" maxlength="32" autocomplete="off" placeholder="empty = open room">
+    <div class="dialog-buttons">
+      <button type="button" class="secondary" data-close>Cancel</button>
+      <button type="submit" class="primary">Create</button>
+    </div>
+  </form>
+</div>
+
+<!-- Dialog: room password -->
+<div id="password-dialog" class="overlay">
+  <form id="password-form" class="card narrow">
+    <h2>Room password</h2>
+    <p class="muted" id="password-lobby-name"></p>
+    <input id="join-password" type="password" maxlength="32" autocomplete="off" required>
+    <div class="dialog-buttons">
+      <button type="button" class="secondary" data-close>Cancel</button>
+      <button type="submit" class="primary">Join</button>
+    </div>
+  </form>
+</div>
+
+<!-- Dialog: account (name / password) -->
+<div id="account-dialog" class="overlay">
+  <div class="card narrow">
+    <h2>Account</h2>
+    <form id="name-form">
+      <label for="new-name">Name <span class="muted">(3–16 characters)</span></label>
+      <input id="new-name" autocomplete="username" maxlength="16" pattern="[A-Za-z0-9_]{3,16}" required>
+      <p class="form-error" aria-live="polite"></p>
+      <button type="submit" class="secondary full">Change name</button>
+    </form>
+    <hr class="divider">
+    <form id="password-change-form">
+      <label for="current-password">Current password</label>
+      <input id="current-password" type="password" autocomplete="current-password" required>
+      <label for="new-password">New password <span class="muted">(min. 8 characters)</span></label>
+      <input id="new-password" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="new-password2">Repeat new password</label>
+      <input id="new-password2" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="form-error" aria-live="polite"></p>
+      <button type="submit" class="secondary full">Change password</button>
+    </form>
+    <button type="button" class="link close-link" data-close>Close</button>
+  </div>
+</div>
+
+<!-- Dialog: abilities & PlayStyles -->
+<div id="loadout-dialog" class="overlay">
+  <div class="card loadout-card">
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-loadout-tab="abilities" role="tab">Abilities</button>
+      <button class="tab" data-loadout-tab="playstyles" role="tab">PlayStyles <span id="playstyle-count" class="muted"></span></button>
+    </div>
+    <p id="loadout-hint" class="muted loadout-hint"></p>
+    <div id="ability-grid" class="loadout-grid"></div>
+    <div id="playstyle-grid" class="loadout-grid hidden"></div>
+    <p class="form-error" id="loadout-error" aria-live="polite"></p>
+    <div class="dialog-buttons">
+      <button type="button" class="secondary" data-close>Cancel</button>
+      <button type="button" id="loadout-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog: settings (keybinds + forfeit during a match) -->
+<div id="settings-dialog" class="overlay">
+  <div class="card settings-card">
+    <h2>Settings</h2>
+    <div id="match-actions" class="match-actions">
+      <button type="button" id="resume-button" class="primary">Resume</button>
+      <button type="button" id="forfeit-button" class="danger-button">Forfeit &amp; back to room</button>
+    </div>
+    <h3>Keybinds <span class="muted">– click a key, then press the new one</span></h3>
+    <div id="keybind-list" class="keybind-list"></div>
+    <div class="dialog-buttons">
+      <button type="button" id="keybind-reset" class="secondary">Reset to default</button>
+      <button type="button" class="secondary" data-close>Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog: change skin -->
+<div id="skin-dialog" class="overlay">
+  <div class="card skin-card">
+    <div class="skin-head">
+      <div id="skin-preview" class="skin-dot big"></div>
+      <div>
+        <h2>Change Skin</h2>
+        <p class="muted" id="skin-preview-name">Default</p>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-skin-tab="flags" role="tab">Countries</button>
+      <button class="tab" data-skin-tab="upload" role="tab">Custom skin</button>
+    </div>
+
+    <div id="skin-tab-flags">
+      <input id="flag-search" placeholder="Search country…" autocomplete="off">
+      <div id="flag-grid" class="skin-grid"></div>
+    </div>
+
+    <div id="skin-tab-upload" class="hidden">
+      <label class="upload-box" for="skin-file">
+        <span>Choose an image or GIF</span>
+        <input id="skin-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+        <span class="muted">PNG, JPG, GIF or WEBP · max. 2 MB · cropped to a circle.<br>Animated GIFs move in game too.</span>
+      </label>
+    </div>
+
+    <p class="form-error" id="skin-error" aria-live="polite"></p>
+    <div class="dialog-buttons">
+      <button type="button" class="secondary" data-close>Cancel</button>
+      <button type="button" id="skin-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
