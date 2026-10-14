@@ -35,12 +35,12 @@ Then open **http://localhost:8000**. To test alone, open the page in two tabs.
 
 Others open `http://<your-IP>:8000` (find it with `ipconfig`). Allow the Windows firewall prompt.
 
-### Over the internet (Pinggy tunnel)
+### Over the internet (Cloudflare tunnel)
 
-Start the server (`start.bat`), then double-click **`tunnel.bat`** and send the `https://…pinggy…` link
-to your friends. Free tunnels last 60 minutes; `tunnel.bat` then opens a new one automatically
-(with a **new** link). Visitors see a Pinggy warning page once – click **Enter site**.
-`tunnel.bat` uses Git's `ssh`, because the SSH built into Windows often fails with Pinggy.
+Install once: `winget install --id Cloudflare.cloudflared`. Then start the server (`start.bat`),
+double-click **`tunnel-cloudflare.bat`** and send the `https://….trycloudflare.com` link to your
+friends. Free, no account, no time limit, no warning page – and much lower ping than Pinggy.
+The link changes every time the tunnel starts.
 
 ## How it works
 
@@ -71,9 +71,11 @@ Red attacks to the right, Blue to the left.
 
 ## Abilities & PlayStyles
 
-- **Abilities** are inspired by Blade Ball. 15 of them fit a top-down football game (Dash, Blink,
-  Shadow Step, Ninja Dash, Invisibility, Freeze, Forcefield, Pull, Telekinesis, Raging Deflection,
-  Rapture, Swap, Hell Hook, Force, Time Hole). The icons are our own, not Blade Ball's artwork.
+- **Abilities** are inspired by Blade Ball – 30 of them, including passives (Reaper, Virus, Guardian Angel,
+  Infinity) and once-per-match ones (Zeus' Storm, Infinity). The icons are your own images in
+  `client/assets/abilities/`, otherwise built-in symbols.
+- **Ability clips:** put `scopophobia.mp4` and `infinity.mp4` into `client/assets/clips/` – they play
+  (game frozen) when those abilities are used. Without a clip a short placeholder is shown.
 - **PlayStyles** are inspired by EA FC 26 (silver/normal versions only). 14 of them fit the game.
   Like in FC, a PlayStyle's badge pops up above the player at the moment it kicks in.
 - Names, effects and cooldowns are listed in `client/js/loadout.js`.

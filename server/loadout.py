@@ -9,7 +9,13 @@ ABILITIES = {
     "dash", "blink", "shadow_step", "ninja_dash", "invisibility",
     "freeze", "forcefield", "pull", "telekinesis", "raging_deflection",
     "rapture", "swap", "hell_hook", "force", "time_hole",
+    "reaper", "platform", "virus", "absolute_confidence", "scopophobia",
+    "flash_counter", "guardian_angel", "slash_of_duality", "slashes_of_fury",
+    "zeus_storm", "displace", "infinity", "titan", "chieftains_totem", "pulse",
 }
+
+# Video clips the client plays for these abilities (files in client/assets/clips/).
+CLIPS = {"scopophobia", "infinity"}
 
 PLAYSTYLES = {
     "finesse_shot", "power_shot", "chip_shot",

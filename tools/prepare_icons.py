@@ -13,6 +13,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 from PIL import Image, ImageDraw, ImageOps
 
@@ -28,7 +29,8 @@ MARKER = (255, 0, 254)  # temporary colour for flood-filled background pixels
 
 
 def normalize(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", name.lower())
+    # unquote: downloaded files are often named like "Zeus%27_Storm" (%27 = apostrophe)
+    return re.sub(r"[^a-z0-9]", "", unquote(name).lower())
 
 
 def match_id(stem: str, valid_ids) -> str | None:

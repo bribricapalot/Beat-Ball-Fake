@@ -1,11 +1,12 @@
 // Abilities (inspired by Blade Ball), PlayStyles (inspired by EA FC 26) and keybinds.
 // The ids must match server/loadout.py. Effects are simulated in game.js.
 
-// cooldown in ms; "needs" explains when the ability can fail (then no cooldown is used).
+// cooldown in ms. passive: works on its own (the ability key does nothing).
+// once: can be used a single time per match.
 export const ABILITIES = {
     dash: {
         name: "Dash", icon: "💨", color: "#4aa3df", cooldown: 5000,
-        description: "Burst forward in your movement direction.",
+        description: "Burst towards your mouse cursor.",
     },
     blink: {
         name: "Blink", icon: "✨", color: "#9b59b6", cooldown: 7000,
@@ -17,7 +18,7 @@ export const ABILITIES = {
     },
     ninja_dash: {
         name: "Ninja Dash", icon: "🥷", color: "#2c3e50", cooldown: 10000,
-        description: "Teleport right next to the ball (max. 500 px away).",
+        description: "Teleport right next to the ball – anywhere on the field.",
     },
     invisibility: {
         name: "Invisibility", icon: "👻", color: "#7f8c8d", cooldown: 12000,
@@ -29,18 +30,18 @@ export const ABILITIES = {
     },
     forcefield: {
         name: "Forcefield", icon: "🛡️", color: "#16a085", cooldown: 12000,
-        description: "For 3 seconds you can't be tackled and you grab loose balls from further away.",
+        description: "For 3 seconds tackles mostly fail (30% chance of a foul getting through) and you grab loose balls from further away.",
     },
     pull: {
         name: "Pull", icon: "🧲", color: "#c0392b", cooldown: 10000,
-        description: "Pull a loose ball towards you (max. 600 px away).",
+        description: "Pull a loose ball towards you – anywhere on the field.",
     },
     telekinesis: {
         name: "Telekinesis", icon: "🌀", color: "#8e44ad", cooldown: 12000,
         description: "Redirect a loose ball towards your cursor – and make it faster.",
     },
     raging_deflection: {
-        name: "Raging Deflection", icon: "💥", color: "#e74c3c", cooldown: 8000,
+        name: "Raging Deflection", icon: "💥", color: "#e74c3c", cooldown: 20000,
         description: "Your next shot (within 5 s) is 200% faster.",
     },
     rapture: {
@@ -53,7 +54,7 @@ export const ABILITIES = {
     },
     hell_hook: {
         name: "Hell Hook", icon: "🪝", color: "#922b21", cooldown: 12000,
-        description: "Hook every opponent within half the field and drag them in front of you.",
+        description: "Chain every opponent within half the field and slowly drag them to you. A ball they carry stays where it is.",
     },
     force: {
         name: "Force", icon: "💢", color: "#f39c12", cooldown: 12000,
@@ -61,7 +62,67 @@ export const ABILITIES = {
     },
     time_hole: {
         name: "Time Hole", icon: "⏳", color: "#6c3483", cooldown: 14000,
-        description: "For 3 seconds, opponents and the ball near you move in slow motion.",
+        description: "For 3 seconds, opponents and the ball in a big circle around you move in slow motion.",
+    },
+    reaper: {
+        name: "Reaper", icon: "💀", color: "#5b2c6f", cooldown: 0, passive: true,
+        description: "Passive: every goal you score makes you 30% stronger in everything (speed, shots, tackles) – stacks up to 5 goals.",
+    },
+    platform: {
+        name: "Platform", icon: "🧱", color: "#8d6e4f", cooldown: 30000,
+        description: "Raise a square wall (as wide as a goal) at your cursor – anywhere on the field. Blocks ball and players for 30 s; the cooldown starts after the wall is gone.",
+    },
+    virus: {
+        name: "Virus", icon: "🦠", color: "#1e8449", cooldown: 0, passive: true,
+        description: "Passive: an opponent who gets the ball from you goes almost blind for 3 seconds.",
+    },
+    absolute_confidence: {
+        name: "Absolute Confidence", icon: "😤", color: "#c0392b", cooldown: 30000,
+        description: "For 6 seconds every ball played by someone else flies to you – nobody can intercept it.",
+    },
+    scopophobia: {
+        name: "Scopophobia", icon: "👁️", color: "#4a235a", cooldown: 30000,
+        description: "Conqueror's Haki: a clip plays and the game freezes – then nobody except you can move for 15 seconds.",
+    },
+    flash_counter: {
+        name: "Flash Counter", icon: "⚡", color: "#f4d03f", cooldown: 20000,
+        description: "After an opponent took the ball straight from your shot (within 5 s): flash behind them, steal the ball and freeze them.",
+    },
+    guardian_angel: {
+        name: "Guardian Angel", icon: "😇", color: "#f7dc6f", cooldown: 50000, passive: true,
+        description: "Passive: when the opponents would score, you save the ball instantly. No goal against you for 10 s – each save resets the 10 s.",
+    },
+    slash_of_duality: {
+        name: "Slash of Duality", icon: "☯️", color: "#7f8c8d", cooldown: 30000,
+        description: "Pick Light or Dark for your next shot. Light: super fast. Dark: starts slow, then speeds up every 0.2 s up to 1000%.",
+    },
+    slashes_of_fury: {
+        name: "Slashes of Fury", icon: "🔥", color: "#e67e22", cooldown: 30000,
+        description: "For 10 s every shot boomerangs back to you and gets 20% faster each kick. After that, fire the charged shot.",
+    },
+    zeus_storm: {
+        name: "Zeus' Storm", icon: "🌩️", color: "#f1c40f", cooldown: 0, once: true,
+        description: "Once per match, 1 minute: everyone except you is 50% slower (also shots) and has a 50% chance every 5 s to be stunned for 3 s.",
+    },
+    displace: {
+        name: "Displace", icon: "🎲", color: "#16a085", cooldown: 13000,
+        description: "The ball teleports to a random player.",
+    },
+    infinity: {
+        name: "Infinity", icon: "♾️", color: "#2e86c1", cooldown: 0, passive: true, once: true,
+        description: "Passive: an invisible force pushes the ball and opponents away – you can't touch the ball. Use once: a clip plays, your team gets 10 goals, and you lose all abilities and PlayStyles.",
+    },
+    titan: {
+        name: "Titan", icon: "🗿", color: "#7b7d7d", cooldown: 20000,
+        description: "For 6 seconds you are bigger, shoot 50% harder and reach further – but you are 25% slower.",
+    },
+    chieftains_totem: {
+        name: "Chieftain's Totem", icon: "🪶", color: "#b9770e", cooldown: 14000,
+        description: "For 3 seconds, you and teammates in a big circle around you are 25% faster and shoot 25% harder.",
+    },
+    pulse: {
+        name: "Pulse", icon: "📡", color: "#a569bd", cooldown: 20000,
+        description: "Disables all opponents' abilities (and their running effects) for 6 seconds.",
     },
 };
 

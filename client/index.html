@@ -194,7 +194,7 @@
     <img src="assets/logo.webp" alt="Big Leagues" class="logo-img card-logo">
     <h2 class="center">Top scorers</h2>
     <table class="leaderboard-table">
-      <thead><tr><th>#</th><th>Name</th><th>Goals</th></tr></thead>
+      <thead><tr><th>#</th><th>Name</th><th>Goals</th><th>Assists</th></tr></thead>
       <tbody id="leaderboard-rows"></tbody>
     </table>
     <p id="leaderboard-empty" class="muted empty-hint hidden"></p>
@@ -220,6 +220,24 @@
   <button id="settings-button" class="settings-button" title="Settings" aria-label="Settings">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.1 7.1 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54a7 7 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.1 7.1 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.61.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.8c.24 0 .44-.18.49-.42l.36-2.54a7 7 0 0 0 1.63-.94l2.39.96c.22.08.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
   </button>
+
+  <div id="countdown" class="countdown" aria-live="assertive"></div>
+
+  <!-- Slash of Duality: pick Light or Dark -->
+  <div id="duality-chooser" class="duality-chooser hidden">
+    <p>Slash of Duality – choose your next shot</p>
+    <button type="button" data-duality="light" class="duality-light">☀ Light <kbd>1</kbd></button>
+    <button type="button" data-duality="dark" class="duality-dark">🌑 Dark <kbd>2</kbd></button>
+  </div>
+
+  <!-- Scopophobia / Infinity clip -->
+  <div id="cinematic" class="cinematic hidden">
+    <video id="cinematic-video" playsinline></video>
+    <div id="cinematic-placeholder" class="cinematic-placeholder">
+      <div id="cinematic-title"></div>
+      <div id="cinematic-sub"></div>
+    </div>
+  </div>
 
   <div id="goal-banner" class="goal-banner" aria-live="polite">
     <div class="goal-title">GOAL!</div>
@@ -269,6 +287,11 @@
       <label><input type="radio" name="teamSize" value="1" checked><span>1 vs 1</span></label>
       <label><input type="radio" name="teamSize" value="2"><span>2 vs 2</span></label>
       <label><input type="radio" name="teamSize" value="3"><span>3 vs 3</span></label>
+      <label><input type="radio" name="teamSize" value="custom"><span>Custom</span></label>
+    </div>
+    <div id="custom-size-row" class="custom-size hidden">
+      <label for="custom-size">Players per team <span class="muted">(1–10)</span></label>
+      <input id="custom-size" type="number" min="1" max="10" step="1" value="5">
     </div>
     <label for="lobby-password">Password <span class="muted">(optional)</span></label>
     <input id="lobby-password" maxlength="32" autocomplete="off" placeholder="empty = open room">

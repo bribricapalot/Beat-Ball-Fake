@@ -6,8 +6,10 @@ manages the lobbies. Accounts and goal statistics live in SQLite (see db.py).
 """
 import asyncio
 import logging
+import mimetypes
 import re
 import secrets
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -23,9 +25,18 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 CLIENT_DIR = ROOT_DIR / "client"
 log = logging.getLogger("uvicorn.error")
 
+# Windows doesn't always know these, and would serve them as application/octet-stream.
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("video/mp4", ".mp4")
+mimetypes.add_type("video/webm", ".webm")
+
 MATCH_SECONDS = 180
 GOAL_PAUSE_SECONDS = 2
-TEAM_SIZES = (1, 2, 3)  # players per team: 1v1, 2v2, 3v3
+COUNTDOWN_FROM = 3
+READY_TIMEOUT_SECONDS = 10  # start the countdown even if someone's game never finishes loading
+MAX_FREEZE_SECONDS = 20     # longest ability clip (Scopophobia, Infinity) that may stop the clock
+MAX_TEAM_SIZE = 10  # players per team: 1v1 … 10v10
 TEAMS = ("A", "B")
 TEAM_NAMES = {"A": "Red", "B": "Blue"}
 MAX_LOBBY_NAME_LENGTH = 24
@@ -79,17 +90,34 @@ class Client:
         # Outgoing messages go through a queue so concurrent senders never interleave
         # and a slow client cannot stall the relay for everyone else.
         self.outbox: asyncio.Queue = asyncio.Queue(maxsize=256)
+        # High-frequency messages (world state, player inputs) are not queued: only the
+        # newest one per sender is kept. Otherwise a slow connection builds up a backlog of
+        # outdated states and the delay grows to many seconds.
+        self.latest: dict[str, dict] = {}
+        self.wakeup = asyncio.Event()
 
     def send(self, message: dict):
+        kind = message.get("type")
+        if kind == "state" or kind == "input":
+            self.latest[f"{kind}:{message.get('from', '')}"] = message
+            self.wakeup.set()
+            return
         try:
             self.outbox.put_nowait(message)
+            self.wakeup.set()
         except asyncio.QueueFull:
             pass  # client is not keeping up; drop rather than block the server
 
     async def writer(self):
         while True:
-            message = await self.outbox.get()
-            await self.websocket.send_json(message)
+            await self.wakeup.wait()
+            self.wakeup.clear()
+            # Important messages (goals, clock, pong, …) first, then the newest state/inputs.
+            while not self.outbox.empty():
+                await self.websocket.send_json(self.outbox.get_nowait())
+            while self.latest:
+                _, message = self.latest.popitem()
+                await self.websocket.send_json(message)
 
     def load_profile(self, user):
         self.name = user["username"]
@@ -121,6 +149,9 @@ class Lobby:
         self.players: dict[str, Client] = {}
         self.teams: dict[str, str] = {}
         self.in_match: set[str] = set()  # who is still playing the running match
+        self.ready: set[str] = set()     # who has finished loading the match
+        self.countdown_started = False
+        self.frozen_until = 0.0          # clock stops while an ability clip plays
         self.status = "waiting"  # or "playing"
         self.score = {"A": 0, "B": 0}
         self.remaining = MATCH_SECONDS
@@ -235,9 +266,11 @@ class Hub:
         lobby.status = "playing"
         lobby.score = {"A": 0, "B": 0}
         lobby.remaining = MATCH_SECONDS
-        lobby.paused = False
+        lobby.paused = True  # frozen until the countdown reaches 0
         lobby.match_id += 1
         lobby.in_match = set(lobby.players)
+        lobby.ready = set()
+        lobby.countdown_started = False
         lobby.broadcast_match({
             "type": "game_start",
             "hostId": lobby.host_id,
@@ -247,7 +280,29 @@ class Hub:
         })
         self.publish_lobby(lobby)
         self.publish_lobby_list()
-        asyncio.create_task(self.run_clock(lobby, lobby.match_id))
+        asyncio.create_task(self.ready_timeout(lobby, lobby.match_id))
+
+    def maybe_start_countdown(self, lobby: Lobby):
+        """Starts the countdown once everyone still in the match has loaded the game."""
+        if lobby.status == "playing" and not lobby.countdown_started and lobby.in_match <= lobby.ready:
+            lobby.countdown_started = True
+            asyncio.create_task(self.run_countdown(lobby, lobby.match_id))
+
+    async def ready_timeout(self, lobby: Lobby, match_id: int):
+        await asyncio.sleep(READY_TIMEOUT_SECONDS)
+        if lobby.match_id == match_id and lobby.status == "playing" and not lobby.countdown_started:
+            lobby.countdown_started = True
+            await self.run_countdown(lobby, match_id)
+
+    async def run_countdown(self, lobby: Lobby, match_id: int):
+        for value in range(COUNTDOWN_FROM, -1, -1):
+            if lobby.match_id != match_id:
+                return
+            lobby.broadcast_match({"type": "countdown", "value": value})
+            if value:
+                await asyncio.sleep(1)
+        lobby.paused = False
+        asyncio.create_task(self.run_clock(lobby, match_id))
 
     def end_match(self, lobby: Lobby, reason: str = "", forfeited: str | None = None):
         lobby.status = "waiting"
@@ -274,13 +329,14 @@ class Hub:
             self.end_match(lobby, reason=f"Team {TEAM_NAMES[team]} forfeited.", forfeited=team)
         else:
             lobby.broadcast_match({"type": "player_left", "id": client.id, "name": client.name})
+            self.maybe_start_countdown(lobby)  # don't keep waiting for someone who left
 
     async def run_clock(self, lobby: Lobby, match_id: int):
         while True:
             await asyncio.sleep(1)
             if lobby.match_id != match_id:
                 return
-            if lobby.paused:
+            if lobby.paused or time.monotonic() < lobby.frozen_until:
                 continue
             lobby.remaining -= 1
             lobby.broadcast_match({"type": "clock", "remaining": lobby.remaining})
@@ -342,15 +398,52 @@ class Hub:
                 if scorer and scorer.user_id and not own_goal:
                     # Own goals don't count for the leaderboard.
                     asyncio.create_task(record_goal(scorer.user_id))
+                # Assist: the teammate who had the ball right before the scorer.
+                assist = lobby.players.get(data.get("assist"))
+                if (not scorer or own_goal or not assist or assist is scorer
+                        or assist.id not in lobby.in_match or lobby.teams.get(assist.id) != scorer_team):
+                    assist = None
+                if assist and assist.user_id:
+                    asyncio.create_task(record_assist(assist.user_id))
                 lobby.broadcast_match({
                     "type": "goal",
                     "team": team,
                     "scorerName": scorer.name if scorer else None,
+                    "assistName": assist.name if assist else None,
                     "ownGoal": own_goal,
                     "scoreA": lobby.score["A"],
                     "scoreB": lobby.score["B"],
                 })
                 asyncio.create_task(self.resume_after_goal(lobby, lobby.match_id))
+            return
+
+        if kind == "freeze":
+            # The host plays an ability clip; the match clock waits for it.
+            ms = data.get("ms")
+            if playing and client.id == lobby.host_id and isinstance(ms, (int, float)) and 0 < ms:
+                lobby.frozen_until = time.monotonic() + min(ms / 1000, MAX_FREEZE_SECONDS)
+            return
+
+        if kind == "bonus_goals":
+            # Infinity: the user's team gets goals (they don't count for the leaderboard).
+            team, count = data.get("team"), data.get("count")
+            if playing and client.id == lobby.host_id and team in TEAMS and count in (10,):
+                lobby.score[team] += count
+                scorer = lobby.players.get(data.get("by"))
+                lobby.broadcast_match({
+                    "type": "bonus",
+                    "team": team,
+                    "count": count,
+                    "name": scorer.name if scorer else None,
+                    "scoreA": lobby.score["A"],
+                    "scoreB": lobby.score["B"],
+                })
+            return
+
+        if kind == "ready":
+            if playing:
+                lobby.ready.add(client.id)
+                self.maybe_start_countdown(lobby)
             return
 
         if kind == "forfeit":
@@ -377,8 +470,8 @@ class Hub:
 
         if kind == "create_lobby":
             team_size = data.get("teamSize")
-            if team_size not in TEAM_SIZES:
-                return client.send({"type": "error", "message": "Invalid room size."})
+            if not isinstance(team_size, int) or isinstance(team_size, bool) or not 1 <= team_size <= MAX_TEAM_SIZE:
+                return client.send({"type": "error", "message": f"Team size must be between 1 and {MAX_TEAM_SIZE}."})
             self.leave(client)
             name = clean_text(data.get("name"), MAX_LOBBY_NAME_LENGTH, f"{client.name}'s room")
             password = data.get("password")
@@ -405,6 +498,13 @@ class Hub:
                 return client.send({"type": "error", "message": "This room is full."})
             self.leave(client)
             self.join(client, target, team)
+            return
+
+        if kind == "kick":
+            target = lobby.players.get(data.get("id")) if lobby else None
+            if target and client.id == lobby.host_id and target is not client:
+                target.send({"type": "kicked", "lobbyName": lobby.name})
+                self.leave(target)
             return
 
         if kind == "leave_lobby":
@@ -436,6 +536,13 @@ async def record_goal(user_id: int):
         await run_in_threadpool(db.add_goal, user_id)
     except Exception as error:
         log.error("Could not save goal: %s", error)
+
+
+async def record_assist(user_id: int):
+    try:
+        await run_in_threadpool(db.add_assist, user_id)
+    except Exception as error:
+        log.error("Could not save assist: %s", error)
 
 
 # ---------------------------------------------------------------------------
@@ -584,11 +691,12 @@ async def choose_loadout(body: LoadoutChoice):
 
 
 ICON_EXTENSIONS = {".png", ".webp", ".svg", ".gif", ".jpg", ".jpeg"}
+CLIP_EXTENSIONS = {".mp4", ".webm", ".mov", ".ogg"}
 
 
 @app.get("/api/icons")
 async def get_icons():
-    """Custom ability / PlayStyle icons dropped into client/assets/abilities|playstyles/."""
+    """Custom ability / PlayStyle icons and ability clips dropped into client/assets/."""
     result = {}
     for folder, valid in (("abilities", loadout.ABILITIES), ("playstyles", loadout.PLAYSTYLES)):
         icons = {}
@@ -598,6 +706,15 @@ async def get_icons():
                 if file.stem in valid and file.suffix.lower() in ICON_EXTENSIONS:
                     icons[file.stem] = f"assets/{folder}/{file.name}"
         result[folder] = icons
+    clips = {}
+    directory = CLIENT_DIR / "assets" / "clips"
+    if directory.is_dir():
+        for file in directory.iterdir():
+            key = re.sub(r"[^a-z]", "", file.stem.lower())
+            for clip in loadout.CLIPS:
+                if key == re.sub(r"[^a-z]", "", clip) and file.suffix.lower() in CLIP_EXTENSIONS:
+                    clips[clip] = f"assets/clips/{file.name}"
+    result["clips"] = clips
     return result
 
 

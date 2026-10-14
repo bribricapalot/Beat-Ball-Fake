@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     goals INTEGER NOT NULL DEFAULT 0,
+    assists INTEGER NOT NULL DEFAULT 0,
     skin TEXT NOT NULL DEFAULT 'default',
     ability TEXT NOT NULL DEFAULT 'dash',
     playstyles TEXT NOT NULL DEFAULT '',
@@ -36,6 +37,7 @@ MIGRATIONS = {
     "skin": "TEXT NOT NULL DEFAULT 'default'",
     "ability": "TEXT NOT NULL DEFAULT 'dash'",
     "playstyles": "TEXT NOT NULL DEFAULT ''",
+    "assists": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _ready = False
@@ -191,10 +193,16 @@ def add_goal(user_id: int):
         cur.execute("UPDATE users SET goals = goals + 1 WHERE id = ?", (user_id,))
 
 
+def add_assist(user_id: int):
+    with cursor() as cur:
+        cur.execute("UPDATE users SET assists = assists + 1 WHERE id = ?", (user_id,))
+
+
 def leaderboard(limit: int = 20):
     with cursor() as cur:
         cur.execute(
-            "SELECT username, goals FROM users WHERE goals > 0 ORDER BY goals DESC, username LIMIT ?",
+            "SELECT username, goals, assists FROM users WHERE goals > 0 OR assists > 0 "
+            "ORDER BY goals DESC, assists DESC, username LIMIT ?",
             (limit,),
         )
         return [dict(row) for row in cur.fetchall()]

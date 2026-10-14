@@ -8,7 +8,8 @@ import {
 const TOKEN_STORAGE_KEY = "bigleagues.token";
 const FILTER_STORAGE_KEY = "bigleagues.filters";
 const CONTROLS_STORAGE_KEY = "bigleagues.controlsHidden";
-const MODE_LABELS = { 1: "1 vs 1", 2: "2 vs 2", 3: "3 vs 3" };
+const MAX_TEAM_SIZE = 10;
+const modeLabel = (teamSize) => `${teamSize} vs ${teamSize}`;
 const TEAM_NAMES = { A: "Red", B: "Blue" };
 const PING_INTERVAL_MS = 3000;
 const LOBBY_REFRESH_MS = 4000;
@@ -360,10 +361,11 @@ async function showLeaderboard(returnTo) {
         const players = await api("leaderboard");
         players.forEach((player, i) => {
             const row = el("tr", i === 0 ? "top-1" : "");
-            row.append(el("td", "", String(i + 1)), el("td", "", player.username), el("td", "", String(player.goals)));
+            row.append(el("td", "", String(i + 1)), el("td", "", player.username),
+                el("td", "", String(player.goals)), el("td", "", String(player.assists ?? 0)));
             rows.append(row);
         });
-        empty.textContent = "No goals yet – be the first!";
+        empty.textContent = "No goals or assists yet – be the first!";
         empty.classList.toggle("hidden", players.length > 0);
     } catch (error) {
         empty.textContent = error.message;
@@ -456,6 +458,10 @@ function handleMessage(msg) {
             if (!state.inGame) showScreen("screen-room");
             break;
 
+        case "kicked":
+            toast(`You were kicked from "${msg.lobbyName}".`);
+            break;
+
         case "left_lobby":
             state.lobby = null;
             stopGame();
@@ -480,6 +486,12 @@ function handleMessage(msg) {
             returnToRoom();
             break;
 
+        case "countdown":
+            if (msg.value === 0) state.countdownDone = true;
+            showCountdown(msg.value);
+            state.game?.handle(msg);
+            break;
+
         case "clock":
             $("timer").textContent = formatTime(msg.remaining);
             $("timer").classList.toggle("low", msg.remaining <= 10);
@@ -488,6 +500,10 @@ function handleMessage(msg) {
         case "goal":
             showGoal(msg);
             state.game?.handle(msg);
+            break;
+
+        case "bonus":
+            showBonus(msg);
             break;
 
         case "game_over":
@@ -558,7 +574,7 @@ function renderLobbyTable() {
         row.tabIndex = 0;
         row.classList.toggle("selected", lobby.id === state.selectedLobbyId);
         row.classList.toggle("unavailable", !isJoinable(lobby));
-        row.title = `${MODE_LABELS[lobby.teamSize]} · Code ${lobby.id}`;
+        row.title = `${modeLabel(lobby.teamSize)} · Code ${lobby.id}`;
 
         const name = el("td", "", lobby.name);
         if (lobby.status === "playing") name.append(el("span", "tag-playing", "playing"));
@@ -643,9 +659,24 @@ $("password-form").addEventListener("submit", (event) => {
 
 $("open-create").addEventListener("click", () => openDialog("create-dialog"));
 
+// "Custom" shows the number field for 1–10 players per team.
+for (const radio of document.querySelectorAll('#create-form input[name="teamSize"]')) {
+    radio.addEventListener("change", () => {
+        const custom = radio.value === "custom" && radio.checked;
+        $("custom-size-row").classList.toggle("hidden", !custom);
+        if (custom) $("custom-size").select();
+    });
+}
+
 $("create-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    const teamSize = Number(new FormData(event.target).get("teamSize"));
+    const choice = new FormData(event.target).get("teamSize");
+    const teamSize = choice === "custom" ? Math.round(Number($("custom-size").value)) : Number(choice);
+    if (!Number.isInteger(teamSize) || teamSize < 1 || teamSize > MAX_TEAM_SIZE) {
+        toast(`Players per team must be between 1 and ${MAX_TEAM_SIZE}.`);
+        $("custom-size").focus();
+        return;
+    }
     net.send({
         type: "create_lobby",
         name: $("lobby-name").value,
@@ -673,6 +704,14 @@ function selectLoadoutTab(tab) {
         : `Equip up to ${MAX_PLAYSTYLES} PlayStyles. Their badge pops up above you whenever they kick in.`;
 }
 
+function abilityMeta(ability) {
+    const parts = [];
+    if (ability.passive) parts.push("Passive");
+    if (ability.once) parts.push("Once per match");
+    if (ability.cooldown) parts.push(`Cooldown ${ability.cooldown / 1000} s`);
+    return parts.join(" · ");
+}
+
 function renderLoadout() {
     const abilityGrid = $("ability-grid");
     abilityGrid.replaceChildren();
@@ -684,7 +723,7 @@ function renderLoadout() {
         bubble.append(abilityIcon(id));
         bubble.style.background = ability.color;
         option.append(bubble, el("strong", "", ability.name),
-            el("span", "meta", `Cooldown ${ability.cooldown / 1000} s`), el("p", "", ability.description));
+            el("span", "meta", abilityMeta(ability)), el("p", "", ability.description));
         option.addEventListener("click", () => {
             loadoutDraft.ability = id;
             renderLoadout();
@@ -990,7 +1029,7 @@ function renderRoom() {
     const isHost = lobby.hostId === state.myId;
 
     $("room-name").textContent = lobby.name;
-    $("room-mode").textContent = MODE_LABELS[lobby.teamSize];
+    $("room-mode").textContent = modeLabel(lobby.teamSize);
     $("room-code").textContent = lobby.id;
     $("room-lock").innerHTML = lobby.hasPassword ? LOCK_ICON : "";
 
@@ -1007,16 +1046,27 @@ function renderRoom() {
             const abilityTag = el("span", "room-ability");
             abilityTag.append(abilityIcon(player.ability));
             abilityTag.title = ability?.name ?? "";
-            item.append(dot, el("span", "", player.name), abilityTag,
+            const name = el("span", "member-name", player.name);
+            if (player.id === lobby.hostId) {
+                const crown = el("span", "crown", "👑");
+                crown.title = "Room leader";
+                name.prepend(crown);
+            }
+            item.append(dot, name, abilityTag,
                 ...player.playstyles.map((p) => {
                     const badge = psBadge(p, true);
                     badge.title = PLAYSTYLES[p]?.name ?? "";
                     return badge;
                 }));
-            const tags = [];
-            if (player.id === lobby.hostId) tags.push("Host");
-            if (player.id === state.myId) tags.push("You");
-            if (tags.length) item.append(el("span", "tag", tags.join(" · ")));
+            if (player.id === state.myId) item.append(el("span", "tag", "You"));
+            // The leader can kick everyone else.
+            if (isHost && player.id !== state.myId) {
+                const kick = el("button", "kick-button", "Kick");
+                kick.type = "button";
+                kick.title = `Kick ${player.name} from the room`;
+                kick.addEventListener("click", () => net.send({ type: "kick", id: player.id }));
+                item.append(kick);
+            }
             list.append(item);
         }
         for (let i = members.length; i < lobby.teamSize; i++) {
@@ -1077,13 +1127,83 @@ function renderAbilityHud(players) {
     updateCooldown(0, ability.cooldown);
 }
 
-function updateCooldown(left, total, charges = null) {
+// left < 0: used up for this match (Zeus' Storm, Infinity) or no ability any more.
+function updateCooldown(left, total, charges = null, ability = undefined) {
     const cooldown = $("ability-cooldown");
-    cooldown.textContent = left > 0 ? Math.ceil(left / 1000) : "";
-    cooldown.style.setProperty("--cd", `${Math.min(100, (left / total) * 100)}%`);
-    $("ability-slot").classList.toggle("ready", left <= 0);
-    // Blink: remaining jumps before the cooldown starts.
-    $("ability-charges").textContent = charges === null ? "" : `×${charges}`;
+    const usedUp = left < 0;
+    cooldown.textContent = usedUp ? "✕" : left > 0 ? Math.ceil(left / 1000) : "";
+    cooldown.style.setProperty("--cd", usedUp ? "100%" : `${Math.min(100, (left / total) * 100)}%`);
+    $("ability-slot").classList.toggle("ready", left === 0);
+    // Blink: remaining jumps; Reaper: goal stacks.
+    $("ability-charges").textContent = charges === null || charges === undefined ? "" : `×${charges}`;
+    if (ability === null) {
+        // Infinity was used: no ability and no PlayStyles any more.
+        $("ability-icon").replaceChildren();
+        $("ability-name").textContent = "No ability";
+        $("hud-playstyles").replaceChildren();
+    }
+}
+
+// Slash of Duality: a small Light / Dark picker on the user's screen.
+let dualityTimer = null;
+function showDualityChooser(ms) {
+    const chooser = $("duality-chooser");
+    chooser.classList.remove("hidden");
+    clearTimeout(dualityTimer);
+    dualityTimer = setTimeout(() => chooser.classList.add("hidden"), ms);
+}
+
+function chooseDuality(choice) {
+    $("duality-chooser").classList.add("hidden");
+    clearTimeout(dualityTimer);
+    state.game?.chooseDuality(choice);
+}
+
+for (const button of document.querySelectorAll("[data-duality]")) {
+    button.addEventListener("click", () => chooseDuality(button.dataset.duality));
+}
+window.addEventListener("keydown", (event) => {
+    if ($("duality-chooser").classList.contains("hidden")) return;
+    if (event.key === "1") chooseDuality("light");
+    if (event.key === "2") chooseDuality("dark");
+});
+
+// Scopophobia / Infinity: play the clip (or a placeholder) while the game is frozen.
+let cinematicTimer = null;
+function showCinematic(clip, ms, userId) {
+    const overlay = $("cinematic");
+    const video = $("cinematic-video");
+    const placeholder = $("cinematic-placeholder");
+    const user = state.lastPlayers?.find((p) => p.id === userId)?.name ?? "";
+    const url = ICONS.clips?.[clip];
+    overlay.classList.remove("hidden");
+    if (url) {
+        placeholder.classList.add("hidden");
+        video.classList.remove("hidden");
+        video.muted = false;
+        video.src = url;
+        video.currentTime = 0;
+        video.play().catch(() => {
+            video.muted = true; // autoplay with sound blocked – play muted instead
+            video.play().catch(() => {});
+        });
+    } else {
+        video.classList.add("hidden");
+        placeholder.classList.remove("hidden");
+        $("cinematic-title").textContent = clip === "infinity" ? "♾️ INFINITY" : "👁️ CONQUEROR'S HAKI";
+        $("cinematic-sub").textContent = user ? `${user} used ${clip === "infinity" ? "Infinity" : "Scopophobia"}` : "";
+    }
+    clearTimeout(cinematicTimer);
+    cinematicTimer = setTimeout(hideCinematic, ms);
+}
+
+function hideCinematic() {
+    clearTimeout(cinematicTimer);
+    const video = $("cinematic-video");
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    $("cinematic").classList.add("hidden");
 }
 
 async function startGame(msg) {
@@ -1094,7 +1214,12 @@ async function startGame(msg) {
     $("timer").classList.remove("low");
     $("game-over").classList.remove("active");
     $("goal-banner").classList.remove("show");
+    $("countdown").classList.remove("show");
+    state.countdownDone = false;
     renderAbilityHud(msg.players);
+    state.lastPlayers = msg.players;
+    $("duality-chooser").classList.add("hidden");
+    hideCinematic();
     renderControlsList();
 
     showScreen("screen-game");
@@ -1119,17 +1244,31 @@ async function startGame(msg) {
         getKeybinds: () => state.keybinds,
         inputBlocked,
         onCooldown: updateCooldown,
+        onReady: () => net.send({ type: "ready" }),
+        onDualityChoose: showDualityChooser,
+        onCinematic: showCinematic,
+        started: state.countdownDone, // in case the countdown finished while the game was loading
     });
 }
 
 function stopGame() {
     gameSession++;
     state.inGame = false;
+    $("duality-chooser").classList.add("hidden");
+    hideCinematic();
     closeDialog("settings-dialog");
     if (state.game) {
         state.game.destroy();
         state.game = null;
     }
+}
+
+// Big 3-2-1-0 before the match clock starts.
+function showCountdown(value) {
+    const node = $("countdown");
+    node.textContent = String(value);
+    node.classList.toggle("zero", value === 0);
+    replayAnimation(node, "show");
 }
 
 function teamSpan(team) {
@@ -1147,11 +1286,26 @@ function showGoal(msg) {
     if (msg.scorerName && msg.ownGoal) {
         text.replaceChildren(`${msg.scorerName} scored an own goal!`);
     } else if (msg.scorerName) {
-        text.replaceChildren(`${msg.scorerName} from team `, teamSpan(msg.team), " scored against ", teamSpan(against));
+        if (msg.assistName) {
+            text.replaceChildren(`${msg.scorerName} from team `, teamSpan(msg.team),
+                " scored a goal with an assist from ", el("span", "t-assist", msg.assistName));
+        } else {
+            text.replaceChildren(`${msg.scorerName} from team `, teamSpan(msg.team), " scored against ", teamSpan(against));
+        }
     } else {
         text.replaceChildren("Team ", teamSpan(msg.team), " scored!");
     }
     $("goal-banner").querySelector(".goal-title").textContent = msg.ownGoal ? "OWN GOAL!" : "GOAL!";
+    replayAnimation($("goal-banner"), "show");
+}
+
+// Infinity: the team gets bonus goals.
+function showBonus(msg) {
+    $("score-a").textContent = msg.scoreA;
+    $("score-b").textContent = msg.scoreB;
+    replayAnimation($(msg.team === "A" ? "score-a" : "score-b"), "score-pop");
+    $("goal-banner").querySelector(".goal-title").textContent = `+${msg.count} GOALS!`;
+    $("goal-text").replaceChildren(`${msg.name ?? "Someone"} used `, el("span", "t-blue", "Infinity"), " for team ", teamSpan(msg.team));
     replayAnimation($("goal-banner"), "show");
 }
 
@@ -1181,6 +1335,19 @@ function returnToRoom() {
 }
 
 $("back-to-lobby").addEventListener("click", returnToRoom);
+
+// Free Pinggy tunnels show a warning page unless a validation cookie is present, and that
+// cookie only lives 10 minutes – after that every image, script or reconnect would get the
+// warning page instead. Renew it the same way the page's "Enter site" button does.
+if (location.hostname.includes("pinggy")) {
+    const renewTunnelCookie = () => fetch("/", {
+        headers: { "X-Pinggy-No-Screen-Cookie": "true" },
+        credentials: "same-origin",
+        cache: "no-store",
+    }).catch(() => {});
+    renewTunnelCookie();
+    setInterval(renewTunnelCookie, 4 * 60 * 1000);
+}
 
 renderControlsList();
 showScreen("screen-start");
